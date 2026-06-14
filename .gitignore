@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# WhatsApp Authentication Folder
+auth_info/
+
+# Environment Variables
+.env
+
+# Database (if any local json/sqlite are used)
+src/database/*.json
+src/database/*.sqlite
+*.bak
+
+# OS generated files
+.DS_Store
+Thumbs.db

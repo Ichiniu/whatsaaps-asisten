@@ -1,8 +1,8 @@
 import { generateAIResponse } from './ai/gemini.js';
 
-console.log('=== TESTING GEMINI CONNECTION ===');
+console.log('=== TESTING GROQ CONNECTION ===');
 
-const testPrompt = 'Say a warm hello in Indonesian and introduce yourself as wbot assistant!';
+const testPrompt = 'Sapa diri kamu dalam bahasa Indonesia dan perkenalkan dirimu sebagai asisten WA bot yang ramah!';
 
 generateAIResponse(testPrompt)
   .then((response) => {

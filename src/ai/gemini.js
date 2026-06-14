@@ -1,38 +1,85 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
+import { ASSISTANT_PERSONA } from './persona.js';
+import { getMemories } from './memoryService.js';
 
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : null;
 
-let genAI = null;
-if (apiKey && apiKey !== 'your_gemini_api_key_here') {
-  genAI = new GoogleGenerativeAI(apiKey);
+let groq = null;
+if (apiKey && apiKey !== 'your_groq_api_key_here') {
+  groq = new Groq({ apiKey });
 }
 
 /**
- * Mengirimkan prompt ke Gemini AI model (gemini-1.5-flash) dan mengembalikan respons teks.
- * @param {string} prompt - Prompt dari pengguna
- * @returns {Promise<string>} - Jawaban dari Gemini
+ * Mengirimkan prompt ke Groq AI (llama-3.1-8b-instant) dan mengembalikan respons teks.
+ * Mendukung riwayat percakapan (multi-turn) dan memori jangka panjang.
+ * 
+ * @param {string} prompt - Prompt terbaru dari pengguna
+ * @param {Array<{role: string, content: string}>} history - Riwayat percakapan sebelumnya
+ * @param {string|null} targetJid - JID WhatsApp pengguna untuk memuat memori
+ * @returns {Promise<string>} - Jawaban dari AI
  */
-export async function generateAIResponse(prompt) {
-  if (!genAI) {
-    // Coba re-inisialisasi jika API key baru dikonfigurasi runtime
-    const currentApiKey = process.env.GEMINI_API_KEY;
-    if (currentApiKey && currentApiKey !== 'your_gemini_api_key_here') {
-      genAI = new GoogleGenerativeAI(currentApiKey);
+export async function generateAIResponse(prompt, history = [], targetJid = null) {
+  if (!groq) {
+    const currentApiKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : null;
+    if (currentApiKey && currentApiKey !== 'your_groq_api_key_here') {
+      groq = new Groq({ apiKey: currentApiKey });
     } else {
-      throw new Error('GEMINI_API_KEY belum dikonfigurasi dengan benar di file .env');
+      throw new Error('GROQ_API_KEY belum dikonfigurasi di file .env');
     }
   }
 
+  // 1. Dapatkan memori jangka panjang jika ada targetJid
+  let memoryPrompt = '';
+  if (targetJid) {
+    const memories = await getMemories(targetJid);
+    if (memories.length > 0) {
+      const factList = memories.map(m => `- ${m.fact}`).join('\n');
+      memoryPrompt = `\n\n[MEMORI JANGKA PANJANG TENTANG MAS ICHSAN]\nKamu mengingat fakta & preferensi tentang Mas Ichsan berikut dari obrolan sebelumnya. Gunakan informasi ini jika relevan untuk menjawab obrolan:\n${factList}`;
+    }
+  }
+
+  // Bangun array messages: system + history + pesan user terbaru
+  const messages = [
+    {
+      role: 'system',
+      content: ASSISTANT_PERSONA.systemInstruction + memoryPrompt
+    },
+    ...history,
+    {
+      role: 'user',
+      content: prompt
+    }
+  ];
+
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    // Coba gunakan model yang lebih pintar (Llama 3.3 70B)
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      temperature: 0.7,
+      max_tokens: 1024
+    });
+
+    return completion.choices[0]?.message?.content || 'Maaf, tidak ada respon dari AI.';
   } catch (error) {
-    console.error('Error calling Gemini API:', error);
-    throw error;
+    console.warn(`[Groq API] Gagal menggunakan llama-3.3-70b-versatile (${error.message}). Menggunakan fallback ke llama-3.1-8b-instant...`);
+    
+    try {
+      // Fallback otomatis ke versi yang lebih ringan dengan limit sangat besar (14.4K RPD)
+      const fallbackCompletion = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages,
+        temperature: 0.7,
+        max_tokens: 1024
+      });
+      
+      return fallbackCompletion.choices[0]?.message?.content || 'Maaf, tidak ada respon dari AI.';
+    } catch (fallbackError) {
+      console.error('Error saat memanggil Groq API pada model fallback:', fallbackError);
+      throw fallbackError;
+    }
   }
 }

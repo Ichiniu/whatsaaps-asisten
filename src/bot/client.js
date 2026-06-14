@@ -3,11 +3,14 @@ import qrcode from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 import { handleMessage } from './messageHandler.js';
+import { checkAndSendReminders } from '../ai/reminderService.js';
 
 dotenv.config();
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+let reminderInterval = null;
 
 export async function startWhatsAppBot() {
   const sessionDir = process.env.SESSION_DIR || './auth_info';
@@ -50,13 +53,29 @@ export async function startWhatsAppBot() {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       
       logger.error(`Koneksi terputus. Status code: ${statusCode}. Reconnecting: ${shouldReconnect}`);
+      
+      // Hentikan interval scheduler jika koneksi ditutup
+      if (reminderInterval) {
+        reminderInterval.stop();
+        reminderInterval = null;
+      }
+
       if (shouldReconnect) {
         startWhatsAppBot();
       }
     } else if (connection === 'open') {
       logger.info('Koneksi WhatsApp sukses terhubung!');
+      
+      // Jalankan scheduler engine untuk pengingat setiap menit menggunakan node-cron
+      if (reminderInterval) {
+        reminderInterval.stop();
+      }
+      reminderInterval = cron.schedule('* * * * *', async () => {
+        await checkAndSendReminders(sock);
+      });
     }
   });
+
 
   sock.ev.on('messages.upsert', async (m) => {
     if (m.type === 'notify') {
