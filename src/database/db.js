@@ -136,6 +136,53 @@ export async function initDatabase() {
     console.error('Error membuat tabel "user_memories":', error);
     throw error;
   }
+
+  // 7. Buat tabel knowledge_base untuk menyimpan fakta/referensi manual per user
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS knowledge_base (
+        id SERIAL PRIMARY KEY,
+        target_jid VARCHAR(100) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        content TEXT NOT NULL,
+        tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_knowledge_base_jid
+      ON knowledge_base(target_jid, updated_at DESC);
+    `);
+    console.log('Tabel "knowledge_base" siap digunakan di PostgreSQL.');
+  } catch (error) {
+    console.error('Error membuat tabel "knowledge_base":', error);
+    throw error;
+  }
+
+  // 8. Buat tabel daily_plans untuk planner harian dengan ringkasan pagi otomatis
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS daily_plans (
+        id SERIAL PRIMARY KEY,
+        target_jid VARCHAR(100) NOT NULL,
+        plan_date DATE NOT NULL,
+        summary_hour INTEGER NOT NULL,
+        summary_minute INTEGER NOT NULL,
+        items TEXT[] NOT NULL,
+        is_sent BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_daily_plans_jid_date
+      ON daily_plans(target_jid, plan_date, is_sent);
+    `);
+    console.log('Tabel "daily_plans" siap digunakan di PostgreSQL.');
+  } catch (error) {
+    console.error('Error membuat tabel "daily_plans":', error);
+    throw error;
+  }
   
   console.log('=== DATABASE INITIALIZATION SUCCESSFUL ===');
 }

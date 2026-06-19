@@ -95,6 +95,120 @@ function analyzeMessageLocally(text, isGroup) {
     };
   }
 
+  // 2c. Deteksi perintah Knowledge Base
+  if (lowerText === '!kb' || lowerText === '!kb help' || lowerText === '!knowledge' || lowerText === '!knowledge help') {
+    return {
+      intent: 'MANAGE_KNOWLEDGE',
+      entities: { action: 'help' },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText === '!kb list' || lowerText === '!knowledge list') {
+    return {
+      intent: 'MANAGE_KNOWLEDGE',
+      entities: { action: 'list' },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText.startsWith('!kb hapus ') || lowerText.startsWith('!kb delete ') || lowerText.startsWith('!knowledge hapus ') || lowerText.startsWith('!knowledge delete ')) {
+    const parts = cleanText.split(/\s+/);
+    const targetId = parts[2] ? parseInt(parts[2], 10) : null;
+    return {
+      intent: 'MANAGE_KNOWLEDGE',
+      entities: { action: 'delete', targetId },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText.startsWith('!kb cari ') || lowerText.startsWith('!kb search ') || lowerText.startsWith('!knowledge cari ') || lowerText.startsWith('!knowledge search ')) {
+    const query = cleanText.split(/\s+/).slice(2).join(' ').trim();
+    return {
+      intent: 'MANAGE_KNOWLEDGE',
+      entities: { action: 'search', query },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText.startsWith('!kb tambah ') || lowerText.startsWith('!kb add ') || lowerText.startsWith('!knowledge tambah ') || lowerText.startsWith('!knowledge add ')) {
+    const payload = cleanText.split(/\s+/).slice(2).join(' ').trim();
+    const segments = payload.split('|').map(part => part.trim());
+    const title = segments[0] || '';
+    const content = segments[1] || '';
+    const tags = segments[2]
+      ? segments[2].split(',').map(tag => tag.trim()).filter(Boolean)
+      : [];
+
+    return {
+      intent: 'MANAGE_KNOWLEDGE',
+      entities: { action: 'add', title, content, tags },
+      source: 'local_rule'
+    };
+  }
+
+  // 2d. Deteksi perintah Planner Harian
+  if (lowerText === '!plan' || lowerText === '!plan help') {
+    return {
+      intent: 'MANAGE_PLAN',
+      entities: { action: 'help' },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText === '!plan list') {
+    return {
+      intent: 'MANAGE_PLAN',
+      entities: { action: 'list' },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText === '!plan hariini' || lowerText === '!plan today') {
+    return {
+      intent: 'MANAGE_PLAN',
+      entities: { action: 'today' },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText.startsWith('!plan hapus ') || lowerText.startsWith('!plan delete ')) {
+    const parts = cleanText.split(/\s+/);
+    const targetId = parts[2] ? parseInt(parts[2], 10) : null;
+    return {
+      intent: 'MANAGE_PLAN',
+      entities: { action: 'delete', targetId },
+      source: 'local_rule'
+    };
+  }
+
+  if (lowerText.startsWith('!plan ')) {
+    const payload = cleanText.slice(6).trim();
+    const segments = payload.split('|').map(part => part.trim());
+    const header = segments[0] || '';
+    const rawItems = segments.slice(1).join('|').trim();
+    const headerMatch = header.match(/^(besok|hariini|today)\s+(\d{1,2}[:.]\d{2})$/i);
+
+    if (headerMatch) {
+      return {
+        intent: 'MANAGE_PLAN',
+        entities: {
+          action: 'add',
+          dayLabel: headerMatch[1].toLowerCase(),
+          summaryTime: headerMatch[2],
+          itemsText: rawItems
+        },
+        source: 'local_rule'
+      };
+    }
+
+    return {
+      intent: 'MANAGE_PLAN',
+      entities: { action: 'invalid_format' },
+      source: 'local_rule'
+    };
+  }
+
   // 3. Deteksi chat AI manual dengan prefix (!ai ...) di grup atau DM
   if (cleanText.startsWith('!ai ')) {
     const prompt = cleanText.slice(4).trim();

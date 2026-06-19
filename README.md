@@ -21,10 +21,20 @@ Bot WhatsApp pintar yang dirancang sebagai Asisten Pribadi berbasis AI. Proyek i
 4. **Message Edit Handler**
    - Mengubah isi pengingat kini cukup dengan meng-*edit* pesan pembuatannya di WhatsApp. Bot akan mendeteksi event edit pesan (protocolMessage type 14) dan langsung memperbarui waktu atau isi agenda di database secara otomatis tanpa perintah tambahan.
 
-5. **Server & Health Monitoring**
+5. **Knowledge Base Pribadi**
+   - Bot mendukung penyimpanan referensi penting milik pengguna agar bisa dipakai ulang saat chat AI.
+   - Perintah yang tersedia:
+     - `!kb help`
+     - `!kb list`
+     - `!kb tambah Judul | Isi catatan | tag1,tag2`
+     - `!kb cari <kata kunci>`
+     - `!kb hapus <nomor>`
+   - Knowledge Base akan ikut dimasukkan ke konteks AI jika relevan dengan pertanyaan pengguna.
+
+6. **Server & Health Monitoring**
    - Ketik `!status` atau `!ping` untuk melihat kesehatan server bot: Uptime, penggunaan RAM, status & latensi Database (PostgreSQL), dan jumlah pengingat yang sedang aktif.
 
-6. **Typo Correction (Levenshtein Distance)**
+7. **Typo Correction (Levenshtein Distance)**
    - Dilengkapi algoritma lokal untuk mendeteksi *typo* pada pemanggilan perintah secara diam-diam (*silent*). Jika Anda mengetik `!remindr` atau `!ia`, bot akan otomatis mengoreksinya di latar belakang untuk menghemat panggilan API ke AI.
 
 ---
@@ -79,8 +89,20 @@ DB_NAME=wbot
 ```
 
 ### 5. Jalankan Bot
+
+**Opsi umum:**
 ```bash
 npm run dev
+```
+
+**Jika memakai Windows PowerShell dan muncul error `npm.ps1 cannot be loaded`:**
+```bat
+npm.cmd run dev
+```
+
+**Alternatif paling aman tanpa npm:**
+```bat
+node src/index.js
 ```
 
 ### 6. Login WhatsApp (Scan QR Code)
@@ -89,12 +111,29 @@ npm run dev
 - Scan QR Code yang muncul di terminal.
 - Tunggu beberapa saat hingga muncul pesan: `"Koneksi WhatsApp sukses terhubung!"`. Bot siap melayani Anda!
 
+**Catatan sesi login:**
+- Session WhatsApp disimpan di folder `auth_info/` (atau sesuai nilai `SESSION_DIR` di file `.env`).
+- Selama folder session itu masih ada dan akun tidak logout, Anda **tidak perlu scan QR lagi** saat bot dijalankan ulang.
+- QR hanya perlu di-scan ulang jika folder session terhapus, session rusak, atau WhatsApp melakukan logout perangkat.
+
+### 7. Menjalankan Test
+```bash
+node src/testDB.js
+node src/testReminder.js
+node src/testMemory.js
+node src/testFase4.js
+```
+
+**Catatan penting:**
+- PostgreSQL harus dalam keadaan aktif sebelum menjalankan bot atau test.
+- Jika PostgreSQL mati, aplikasi akan gagal konek ke `localhost:5432`.
+
 ---
 
 ## 📂 Struktur Direktori Utama
-- `src/ai/`: Pusat kecerdasan bot (Brain, Gemini Chat AI, Memory Service, dan Reminder Service).
+- `src/ai/`: Pusat kecerdasan bot (Brain, Gemini Chat AI, Memory Service, Reminder Service, dan Knowledge Base Service).
 - `src/bot/`: Logika komunikasi dengan WhatsApp Baileys (Client, Message Handler, Router).
 - `src/database/`: Konfigurasi & Inisialisasi PostgreSQL (`db.js`).
 
 ---
-*Dibuat dengan ❤️ oleh Mas Ichsan & AI.*
+

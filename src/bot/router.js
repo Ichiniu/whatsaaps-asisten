@@ -4,6 +4,8 @@ import { addReminder, getLastFiredReminder, snoozeReminder } from '../ai/reminde
 import { handleReminderCommand } from './reminderCommands.js';
 import { getHistory, saveMessage, clearHistory } from '../ai/conversationService.js';
 import { getMemories, deleteMemory, extractAndSaveMemories } from '../ai/memoryService.js';
+import { addKnowledge, listKnowledge, deleteKnowledge, searchKnowledge } from '../ai/knowledgeBaseService.js';
+import { addDailyPlan, listDailyPlans, getTodayPlans, deleteDailyPlan } from '../ai/plannerService.js';
 import { getPool } from '../database/db.js';
 
 /**
@@ -26,7 +28,7 @@ export async function routeMessage(sock, msg, analysis) {
 
     case 'HELP':
       // Tampilkan bantuan umum
-      const helpText = `👋 *Halo Mas Ichsan! Saya Asisten Pribadi Anda.*\n\nBerikut adalah cara menggunakan saya:\n\n💬 *Tanya Jawab AI:*\n• Ketik langsung pesan apa saja di chat ini untuk mengobrol dengan asisten.\n• Gunakan *!ai clear* untuk menghapus memori percakapan kita.\n• Gunakan *!ai memory* untuk melihat fakta yang diingat asisten.\n• Gunakan *!ai forget <nomor>* untuk menghapus ingatan tertentu.\n\n⏰ *Sistem Pengingat:*\n• Ketik secara alami: _"ingatkan aku besok jam 8 pagi beli susu"_ atau _"ingetin nanti malam jam 7 rapat"_\n• Pengingat Rutin/Berulang: _"ingatkan setiap hari jam 07:00 sarapan"_\n\n📋 *Manajemen Pengingat:*\n• *!reminder list* — Tampilkan semua pengingat aktif\n• *!reminder hapus <nomor>* — Hapus pengingat sekali jalan\n• *!reminder stop <nomor>* — Hentikan pengingat berulang\n• *!reminder help* — Tampilkan panduan lengkap pengingat`;
+      const helpText = `👋 *Halo Mas Ichsan! Saya Asisten Pribadi Anda.*\n\nBerikut adalah cara menggunakan saya:\n\n💬 *Tanya Jawab AI:*\n• Ketik langsung pesan apa saja di chat ini untuk mengobrol dengan asisten.\n• Gunakan *!ai clear* untuk menghapus memori percakapan kita.\n• Gunakan *!ai memory* untuk melihat fakta yang diingat asisten.\n• Gunakan *!ai forget <nomor>* untuk menghapus ingatan tertentu.\n\n📚 *Knowledge Base Pribadi:*\n• *!kb help* — Panduan format Knowledge Base\n• *!kb list* — Lihat semua catatan knowledge base\n• *!kb tambah Judul | Isi | tag1,tag2* — Simpan pengetahuan penting\n• *!kb cari <kata kunci>* — Cari catatan knowledge base\n• *!kb hapus <nomor>* — Hapus catatan berdasarkan nomor urut\n\n📅 *Mode 2 - Daily Planner:*\n• *!plan help* — Panduan planner harian\n• *!plan besok 07:00 | agenda 1, agenda 2* — Simpan planner dan kirim ringkasan otomatis\n• *!plan list* — Lihat semua planner tersimpan\n• *!plan hariini* — Lihat agenda untuk hari ini\n• *!plan hapus <id>* — Hapus planner berdasarkan ID\n\n⏰ *Sistem Pengingat:*\n• Ketik secara alami: _"ingatkan aku besok jam 8 pagi beli susu"_ atau _"ingetin nanti malam jam 7 rapat"_\n• Pengingat Rutin/Berulang: _"ingatkan setiap hari jam 07:00 sarapan"_\n\n📋 *Manajemen Pengingat:*\n• *!reminder list* — Tampilkan semua pengingat aktif\n• *!reminder hapus <nomor>* — Hapus pengingat sekali jalan\n• *!reminder stop <nomor>* — Hentikan pengingat berulang\n• *!reminder help* — Tampilkan panduan lengkap pengingat\n\n🖥️ *Monitoring Server:*\n• *!status* / *!ping* — Lihat kesehatan bot, RAM, database, dan pengingat aktif`;
       await sock.sendMessage(from, { text: helpText }, { quoted: msg });
       break;
 
@@ -105,6 +107,222 @@ export async function routeMessage(sock, msg, analysis) {
           await sock.sendMessage(from, { text: '⚠️ Gagal melupakan ingatan. Silakan coba lagi.' }, { quoted: msg });
         }
       }
+      break;
+
+    case 'MANAGE_KNOWLEDGE':
+      const kbAction = entities.action;
+
+      if (kbAction === 'help') {
+        const kbHelpText = `📚 *Knowledge Base Pribadi*\n\nGunakan format berikut:\n• *!kb list*\n• *!kb cari <kata kunci>*\n• *!kb hapus <nomor>*\n• *!kb tambah Judul | Isi catatan | tag1,tag2*\n\nContoh:\n*!kb tambah Server Fly | Project pakai fly env untuk local development | devops,server*\n\nCatatan:\n- Bagian *tag* opsional\n- Tanda *|* dipakai sebagai pemisah judul, isi, dan tag`;
+        await sock.sendMessage(from, { text: kbHelpText }, { quoted: msg });
+        return;
+      }
+
+      if (kbAction === 'list') {
+        const items = await listKnowledge(from);
+        if (items.length === 0) {
+          await sock.sendMessage(from, { text: '📭 Knowledge Base masih kosong. Tambahkan dengan format *!kb tambah Judul | Isi | tag1,tag2*' }, { quoted: msg });
+          return;
+        }
+
+        const lines = items.map((item, idx) => {
+          const tags = Array.isArray(item.tags) && item.tags.length > 0
+            ? `\n   🏷️ ${item.tags.join(', ')}`
+            : '';
+          return `${idx + 1}. *${item.title}*\n   ${item.content}${tags}`;
+        });
+
+        await sock.sendMessage(from, {
+          text: `📚 *Daftar Knowledge Base Mas Ichsan*\n\n${lines.join('\n\n')}`
+        }, { quoted: msg });
+        return;
+      }
+
+      if (kbAction === 'add') {
+        const { title, content, tags } = entities;
+
+        if (!title || !content) {
+          await sock.sendMessage(from, {
+            text: '⚠️ Format salah.\nGunakan: *!kb tambah Judul | Isi catatan | tag1,tag2*'
+          }, { quoted: msg });
+          return;
+        }
+
+        const savedItem = await addKnowledge(from, title, content, tags || []);
+        if (!savedItem) {
+          await sock.sendMessage(from, { text: '⚠️ Gagal menyimpan Knowledge Base. Silakan coba lagi.' }, { quoted: msg });
+          return;
+        }
+
+        const tagText = Array.isArray(savedItem.tags) && savedItem.tags.length > 0
+          ? `\n🏷️ Tag: ${savedItem.tags.join(', ')}`
+          : '';
+
+        await sock.sendMessage(from, {
+          text: `✅ *Knowledge Base berhasil disimpan!*\n\n📌 Judul: *${savedItem.title}*\n📝 Isi: ${savedItem.content}${tagText}`
+        }, { quoted: msg });
+        return;
+      }
+
+      if (kbAction === 'search') {
+        const query = entities.query;
+        if (!query) {
+          await sock.sendMessage(from, { text: '⚠️ Masukkan kata kunci pencarian.\nContoh: *!kb cari server fly*' }, { quoted: msg });
+          return;
+        }
+
+        const matches = await searchKnowledge(from, query, 5);
+        if (matches.length === 0) {
+          await sock.sendMessage(from, { text: `🔎 Tidak ada Knowledge Base yang cocok untuk kata kunci: *${query}*` }, { quoted: msg });
+          return;
+        }
+
+        const lines = matches.map((item, idx) => {
+          const tags = Array.isArray(item.tags) && item.tags.length > 0
+            ? `\n   🏷️ ${item.tags.join(', ')}`
+            : '';
+          return `${idx + 1}. *${item.title}*\n   ${item.content}${tags}`;
+        });
+
+        await sock.sendMessage(from, {
+          text: `🔎 *Hasil pencarian Knowledge Base*\nKata kunci: *${query}*\n\n${lines.join('\n\n')}`
+        }, { quoted: msg });
+        return;
+      }
+
+      if (kbAction === 'delete') {
+        const targetNo = entities.targetId;
+        if (!targetNo || isNaN(targetNo) || targetNo < 1) {
+          await sock.sendMessage(from, { text: '⚠️ Format salah. Gunakan: *!kb hapus <nomor_urut>*' }, { quoted: msg });
+          return;
+        }
+
+        const items = await listKnowledge(from);
+        if (targetNo > items.length) {
+          await sock.sendMessage(from, { text: `⚠️ Nomor urut *${targetNo}* tidak ditemukan. Total item aktif: *${items.length}*.` }, { quoted: msg });
+          return;
+        }
+
+        const targetItem = items[targetNo - 1];
+        const success = await deleteKnowledge(from, targetItem.id);
+
+        if (!success) {
+          await sock.sendMessage(from, { text: '⚠️ Gagal menghapus Knowledge Base. Silakan coba lagi.' }, { quoted: msg });
+          return;
+        }
+
+        await sock.sendMessage(from, {
+          text: `🗑️ *Knowledge Base dihapus*\n\n📌 *${targetItem.title}*\n📝 ${targetItem.content}`
+        }, { quoted: msg });
+        return;
+      }
+
+      await sock.sendMessage(from, { text: '⚠️ Perintah Knowledge Base belum valid. Gunakan *!kb help*.' }, { quoted: msg });
+      break;
+
+    case 'MANAGE_PLAN':
+      if (entities.action === 'help') {
+        const planHelpText = `📅 *Mode 2 - Daily Planner*\n\nGunakan format berikut:\n• *!plan besok 07:00 | review task, meeting tim, follow up client*\n• *!plan hariini*\n• *!plan list*\n• *!plan hapus <id>*\n\nCatatan:\n- Waktu memakai format 24 jam, contoh *07:00*\n- Agenda dipisahkan dengan tanda koma\n- Ringkasan planner akan dikirim otomatis pada jam yang ditentukan`;
+        await sock.sendMessage(from, { text: planHelpText }, { quoted: msg });
+        return;
+      }
+
+      if (entities.action === 'invalid_format') {
+        await sock.sendMessage(from, {
+          text: '⚠️ Format planner salah.\nGunakan: *!plan besok 07:00 | agenda 1, agenda 2*'
+        }, { quoted: msg });
+        return;
+      }
+
+      if (entities.action === 'add') {
+        const savedPlan = await addDailyPlan(from, entities.dayLabel, entities.summaryTime, entities.itemsText);
+        if (!savedPlan) {
+          await sock.sendMessage(from, {
+            text: '⚠️ Gagal menyimpan planner.\nGunakan format: *!plan besok 07:00 | agenda 1, agenda 2*'
+          }, { quoted: msg });
+          return;
+        }
+
+        const items = Array.isArray(savedPlan.items) ? savedPlan.items : [];
+        const lines = items.map((item, idx) => `${idx + 1}. ${item}`);
+        const hh = `${savedPlan.summary_hour}`.padStart(2, '0');
+        const mm = `${savedPlan.summary_minute}`.padStart(2, '0');
+
+        await sock.sendMessage(from, {
+          text: `✅ *Planner harian berhasil disimpan!*\n\n🆔 ID: *${savedPlan.id}*\n📅 Tanggal: *${savedPlan.plan_date}*\n⏰ Ringkasan: *${hh}:${mm}*\n\n${lines.join('\n')}`
+        }, { quoted: msg });
+        return;
+      }
+
+      if (entities.action === 'list') {
+        const plans = await listDailyPlans(from);
+        if (plans.length === 0) {
+          await sock.sendMessage(from, {
+            text: '📭 Belum ada planner tersimpan. Tambahkan dengan format *!plan besok 07:00 | agenda 1, agenda 2*'
+          }, { quoted: msg });
+          return;
+        }
+
+        const lines = plans.map(plan => {
+          const hh = `${plan.summary_hour}`.padStart(2, '0');
+          const mm = `${plan.summary_minute}`.padStart(2, '0');
+          const items = Array.isArray(plan.items) ? plan.items.map((item, idx) => `   ${idx + 1}. ${item}`).join('\n') : '';
+          const status = plan.is_sent ? '✅ terkirim' : '🕒 menunggu';
+          return `🆔 *${plan.id}* | 📅 ${plan.plan_date} | ⏰ ${hh}:${mm} | ${status}\n${items}`;
+        });
+
+        await sock.sendMessage(from, {
+          text: `📅 *Daftar Daily Planner Mas Ichsan*\n\n${lines.join('\n\n')}`
+        }, { quoted: msg });
+        return;
+      }
+
+      if (entities.action === 'today') {
+        const plans = await getTodayPlans(from);
+        if (plans.length === 0) {
+          await sock.sendMessage(from, {
+            text: '📭 Tidak ada planner untuk hari ini.'
+          }, { quoted: msg });
+          return;
+        }
+
+        const lines = plans.map(plan => {
+          const hh = `${plan.summary_hour}`.padStart(2, '0');
+          const mm = `${plan.summary_minute}`.padStart(2, '0');
+          const items = Array.isArray(plan.items) ? plan.items.map((item, idx) => `   ${idx + 1}. ${item}`).join('\n') : '';
+          return `🆔 *${plan.id}* | ⏰ ${hh}:${mm}\n${items}`;
+        });
+
+        await sock.sendMessage(from, {
+          text: `📅 *Planner Hari Ini*\n\n${lines.join('\n\n')}`
+        }, { quoted: msg });
+        return;
+      }
+
+      if (entities.action === 'delete') {
+        const targetId = entities.targetId;
+        if (!targetId || isNaN(targetId) || targetId < 1) {
+          await sock.sendMessage(from, {
+            text: '⚠️ Format salah. Gunakan: *!plan hapus <id>*'
+          }, { quoted: msg });
+          return;
+        }
+
+        const success = await deleteDailyPlan(from, targetId);
+        if (!success) {
+          await sock.sendMessage(from, {
+            text: `⚠️ Planner dengan ID *${targetId}* tidak ditemukan atau bukan milik Mas Ichsan.`
+          }, { quoted: msg });
+          return;
+        }
+
+        await sock.sendMessage(from, {
+          text: `🗑️ *Planner dengan ID ${targetId} berhasil dihapus.*`
+        }, { quoted: msg });
+        return;
+      }
+
+      await sock.sendMessage(from, { text: '⚠️ Perintah planner belum valid. Gunakan *!plan help*.' }, { quoted: msg });
       break;
 
     case 'CREATE_REMINDER':

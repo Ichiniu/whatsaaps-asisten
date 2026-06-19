@@ -2,6 +2,7 @@ import { initDatabase, getPool } from './database/db.js';
 import { addReminder, getReminderByMsgId, updateReminderByMsgId } from './ai/reminderService.js';
 import { analyzeMessage } from './ai/brain.js';
 import { handleMessageEdit } from './bot/messageHandler.js';
+import { addKnowledge, listKnowledge, deleteKnowledge, searchKnowledge } from './ai/knowledgeBaseService.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -27,6 +28,7 @@ async function runTests() {
 
     // Bersihkan database tester
     await pool.query('DELETE FROM reminders WHERE target_jid = $1', [JID]);
+    await pool.query('DELETE FROM knowledge_base WHERE target_jid = $1', [JID]);
 
     console.log('--- 1. Testing DB whatsapp_msg_id & CRUD ---');
     // 1.1 Simpan pengingat dengan whatsappMsgId
@@ -61,7 +63,59 @@ async function runTests() {
       throw new Error(`❌ Perintah "!status" gagal di-parse! Hasil: ${JSON.stringify(statusResult)}`);
     }
 
-    console.log('\n--- 3. Testing handleMessageEdit Simulasi ---');
+    console.log('\n--- 3. Testing Knowledge Base ---');
+    const kbIntentHelp = await analyzeMessage('!kb help', false);
+    if (kbIntentHelp.intent === 'MANAGE_KNOWLEDGE' && kbIntentHelp.entities.action === 'help') {
+      console.log('✅ Perintah "!kb help" sukses di-parse menjadi MANAGE_KNOWLEDGE.');
+    } else {
+      throw new Error(`❌ Perintah "!kb help" gagal di-parse! Hasil: ${JSON.stringify(kbIntentHelp)}`);
+    }
+
+    const kbIntentAdd = await analyzeMessage('!kb tambah Server Fly | Local development pakai fly env | devops,server', false);
+    if (
+      kbIntentAdd.intent === 'MANAGE_KNOWLEDGE' &&
+      kbIntentAdd.entities.action === 'add' &&
+      kbIntentAdd.entities.title === 'Server Fly'
+    ) {
+      console.log('✅ Perintah "!kb tambah ..." sukses di-parse.');
+    } else {
+      throw new Error(`❌ Perintah "!kb tambah" gagal di-parse! Hasil: ${JSON.stringify(kbIntentAdd)}`);
+    }
+
+    const kbSaved = await addKnowledge(JID, 'Server Fly', 'Local development pakai fly env', ['devops', 'server']);
+    if (kbSaved && kbSaved.title === 'Server Fly') {
+      console.log('✅ addKnowledge berhasil menyimpan data.');
+    } else {
+      throw new Error('❌ addKnowledge gagal menyimpan data!');
+    }
+
+    const kbList = await listKnowledge(JID);
+    if (kbList.length === 1 && kbList[0].title === 'Server Fly') {
+      console.log('✅ listKnowledge berhasil mengambil data.');
+    } else {
+      throw new Error('❌ listKnowledge gagal mengambil data!');
+    }
+
+    const kbSearch = await searchKnowledge(JID, 'fly env', 5);
+    if (kbSearch.length > 0 && kbSearch[0].title === 'Server Fly') {
+      console.log('✅ searchKnowledge berhasil menemukan data relevan.');
+    } else {
+      throw new Error('❌ searchKnowledge gagal menemukan data!');
+    }
+
+    const kbDeleted = await deleteKnowledge(JID, kbSaved.id);
+    if (!kbDeleted) {
+      throw new Error('❌ deleteKnowledge gagal menghapus data!');
+    }
+
+    const kbAfterDelete = await listKnowledge(JID);
+    if (kbAfterDelete.length === 0) {
+      console.log('✅ deleteKnowledge berhasil menghapus data.');
+    } else {
+      throw new Error('❌ deleteKnowledge gagal, data masih tersisa!');
+    }
+
+    console.log('\n--- 4. Testing handleMessageEdit Simulasi ---');
     
     // 3.1 Kasus A: Diedit menjadi pengingat baru yang valid
     console.log('\nSub-Test A: Edit pesan menjadi pengingat baru...');
@@ -82,7 +136,7 @@ async function runTests() {
       throw new Error('❌ Sub-Test A GAGAL: Pengingat di DB tidak terupdate!');
     }
 
-    // 3.2 Kasus B: Diedit menjadi pesan biasa (bukan pengingat) -> harus memicu pembatalan/delete
+    // 4.2 Kasus B: Diedit menjadi pesan biasa (bukan pengingat) -> harus memicu pembatalan/delete
     console.log('\nSub-Test B: Edit pesan menjadi teks biasa...');
     const editInfoInvalid = {
       isEdit: true,

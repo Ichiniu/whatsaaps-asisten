@@ -89,5 +89,20 @@ export async function startWhatsAppBot() {
     }
   });
 
+  sock.ev.on('messages.update', async (updates) => {
+    for (const update of updates) {
+      try {
+        if (update.update?.message) {
+          await handleMessage(sock, {
+            key: update.key,
+            message: update.update.message
+          });
+        }
+      } catch (err) {
+        logger.error('Error handling message update:', err);
+      }
+    }
+  });
+
   return sock;
 }
