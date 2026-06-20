@@ -59,25 +59,24 @@ export async function generateAIResponse(prompt, history = [], targetJid = null)
   ];
 
   try {
-    // Coba gunakan model yang lebih pintar (Llama 3.3 70B)
+    // Gunakan model ringan lebih dulu agar respons DM terasa cepat
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: 'llama-3.1-8b-instant',
       messages,
-      temperature: 0.7,
-      max_tokens: 1024
+      temperature: 0.5,
+      max_tokens: 512
     });
 
     return completion.choices[0]?.message?.content || 'Maaf, tidak ada respon dari AI.';
   } catch (error) {
-    console.warn(`[Groq API] Gagal menggunakan llama-3.3-70b-versatile (${error.message}). Menggunakan fallback ke llama-3.1-8b-instant...`);
+    console.warn(`[Groq API] Gagal menggunakan llama-3.1-8b-instant (${error.message}). Menggunakan fallback ke llama-3.3-70b-versatile...`);
     
     try {
-      // Fallback otomatis ke versi yang lebih ringan dengan limit sangat besar (14.4K RPD)
       const fallbackCompletion = await groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
+        model: 'llama-3.3-70b-versatile',
         messages,
-        temperature: 0.7,
-        max_tokens: 1024
+        temperature: 0.5,
+        max_tokens: 512
       });
       
       return fallbackCompletion.choices[0]?.message?.content || 'Maaf, tidak ada respon dari AI.';

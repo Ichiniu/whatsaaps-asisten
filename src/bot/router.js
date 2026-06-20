@@ -438,6 +438,9 @@ export async function routeMessage(sock, msg, analysis) {
 
     default:
       console.warn(`[Router] Intent tidak dikenal: ${intent}`);
+      await sock.sendMessage(from, {
+        text: 'Maaf Mas Ichsan, pesan tadi belum bisa saya pahami. Coba kirim ulang dengan kalimat lebih jelas atau pakai *!help*.'
+      }, { quoted: msg });
       break;
   }
 }

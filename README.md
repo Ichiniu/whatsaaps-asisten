@@ -31,10 +31,20 @@ Bot WhatsApp pintar yang dirancang sebagai Asisten Pribadi berbasis AI. Proyek i
      - `!kb hapus <nomor>`
    - Knowledge Base akan ikut dimasukkan ke konteks AI jika relevan dengan pertanyaan pengguna.
 
-6. **Server & Health Monitoring**
+6. **Daily Planner Otomatis**
+   - Bot mendukung planner harian yang bisa dijadwalkan untuk mengirim ringkasan agenda otomatis pada jam tertentu.
+   - Perintah yang tersedia:
+     - `!plan help`
+     - `!plan besok 07:00 | review task, meeting tim, follow up client`
+     - `!plan list`
+     - `!plan hariini`
+     - `!plan hapus <id>`
+   - Planner disimpan di database dan dicek otomatis setiap menit bersama scheduler reminder.
+
+7. **Server & Health Monitoring**
    - Ketik `!status` atau `!ping` untuk melihat kesehatan server bot: Uptime, penggunaan RAM, status & latensi Database (PostgreSQL), dan jumlah pengingat yang sedang aktif.
 
-7. **Typo Correction (Levenshtein Distance)**
+8. **Typo Correction (Levenshtein Distance)**
    - Dilengkapi algoritma lokal untuk mendeteksi *typo* pada pemanggilan perintah secara diam-diam (*silent*). Jika Anda mengetik `!remindr` atau `!ia`, bot akan otomatis mengoreksinya di latar belakang untuk menghemat panggilan API ke AI.
 
 ---
@@ -131,9 +141,10 @@ node src/testFase4.js
 ---
 
 ## 📂 Struktur Direktori Utama
-- `src/ai/`: Pusat kecerdasan bot (Brain, Gemini Chat AI, Memory Service, Reminder Service, dan Knowledge Base Service).
+- `src/ai/`: Pusat kecerdasan bot (Brain, Gemini Chat AI, Memory Service, Reminder Service, Knowledge Base Service, dan Planner Service).
 - `src/bot/`: Logika komunikasi dengan WhatsApp Baileys (Client, Message Handler, Router).
 - `src/database/`: Konfigurasi & Inisialisasi PostgreSQL (`db.js`).
+- `src/testFase4.js`: Skrip verifikasi fitur FASE 4 termasuk edit handler, knowledge base, planner, dan status server.
 
 ---
 

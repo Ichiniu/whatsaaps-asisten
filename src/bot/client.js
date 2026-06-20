@@ -5,11 +5,13 @@ import pino from 'pino';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { handleMessage } from './messageHandler.js';
-import { checkAndSendReminders } from '../ai/reminderService.js';
+import { checkAndSendDailyPlans } from '../ai/plannerService.js';
+import { startReminderScheduler, stopReminderScheduler } from '../scheduler/reminderScheduler.js';
 
 dotenv.config();
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+const logger = pino({ level: process.env.LOG_LEVEL || 'error' });
+const baileysLogger = pino({ level: 'silent' });
 let reminderInterval = null;
 
 export async function startWhatsAppBot() {
@@ -21,7 +23,7 @@ export async function startWhatsAppBot() {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
-    logger: logger
+    logger: baileysLogger
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -59,6 +61,7 @@ export async function startWhatsAppBot() {
         reminderInterval.stop();
         reminderInterval = null;
       }
+      stopReminderScheduler();
 
       if (shouldReconnect) {
         startWhatsAppBot();
@@ -66,13 +69,14 @@ export async function startWhatsAppBot() {
     } else if (connection === 'open') {
       logger.info('Koneksi WhatsApp sukses terhubung!');
       
-      // Jalankan scheduler engine untuk pengingat setiap menit menggunakan node-cron
+      // Jalankan scheduler planner harian dan scheduler reminder database
       if (reminderInterval) {
         reminderInterval.stop();
       }
       reminderInterval = cron.schedule('* * * * *', async () => {
-        await checkAndSendReminders(sock);
+        await checkAndSendDailyPlans(sock);
       });
+      startReminderScheduler(sock);
     }
   });
 
@@ -96,6 +100,8 @@ export async function startWhatsAppBot() {
           await handleMessage(sock, {
             key: update.key,
             message: update.update.message
+          }, {
+            isEdit: true
           });
         }
       } catch (err) {
